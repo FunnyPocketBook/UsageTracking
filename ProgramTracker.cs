@@ -16,17 +16,20 @@ namespace ProgramTracker
         public static extern IntPtr GetWindowThreadProcessId(IntPtr hWnd, out uint ProcessId);
         private static ConfigBuilder builder = ConfigBuilder.Instance();
 
-
         private static void Main(string[] args)
         {
             builder.Load();
             DbContext db = new DbContext();
             db.Database.Migrate();
+
             Console.CancelKeyPress += (sender, e) => KeyboardInterrupt(db);
+
             Stopwatch stopWatch = new Stopwatch();
             stopWatch.Start();
+
             Program curProgram = InitProgramCounter();
             string oldProgramName = curProgram.Name;
+
             while (true)
             {
                 if (!oldProgramName.Equals(curProgram.Name))
@@ -57,19 +60,34 @@ namespace ProgramTracker
                     db.SaveChanges();
                 }
                 oldProgramName = GetActiveProcessFileName();
-                System.Threading.Thread.Sleep(1000);
-                //Console.Clear();
+                System.Threading.Thread.Sleep(builder.Config.PollRate);
+                /*
+                // Poll cursor position every minute to check activity
+                counter++;
+                if (counter % (60 / builder.Config.PollRate * 1000) == 0)
+                {
+                    counter = 0;
+                    Point curMousePosition = GetMousePosition();
+                    if (curMousePosition.Equals(oldMousePosition))
+                    {
+                        if (stopWatch.IsRunning)
+                        {
+                            stopWatch.Stop();
+                        }
+                    }
+                    else
+                    {
+                        if (!stopWatch.IsRunning)
+                        {
+                            stopWatch.Start();
+                        }
+                    }
+                }*/
                 Console.SetCursorPosition(0, 0);
-                foreach (Program p in db.Programs
-                    //.Include(prog => prog.Timeranges)
-                    .ToList())
+                foreach (Program p in db.Programs.ToList())
                 {
                     Console.WriteLine($"Name: {p.Name}, User: {p.User}, Elapsed: {p.Elapsed}");
                     List<Timerange> timeranges = p.Timeranges;
-                    /*foreach (Timerange t in timeranges)
-                    {
-                        Console.WriteLine("Start: {0}, End: {1}", t.Start, t.End);
-                    }*/
                     Console.WriteLine("--------");
                 }
             }

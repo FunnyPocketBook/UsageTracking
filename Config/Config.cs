@@ -12,5 +12,6 @@ namespace ProgramTracker.Config
         public string Password { get; set; } = "1234";
         public string Version { get; set; } = "10.4.13";
         public string User { get; set; } = $"{Environment.UserName}_{Environment.MachineName}";
+        public int PollRate { get; set; } = 1000;
     }
 }

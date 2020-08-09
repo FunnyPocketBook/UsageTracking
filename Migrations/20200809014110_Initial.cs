@@ -31,24 +31,23 @@ namespace ProgramTracker.Migrations
                         .Annotation("MySql:ValueGenerationStrategy", MySqlValueGenerationStrategy.IdentityColumn),
                     Start = table.Column<DateTime>(nullable: false),
                     End = table.Column<DateTime>(nullable: false),
-                    ProgramId = table.Column<string>(nullable: true),
-                    ProgramId1 = table.Column<int>(nullable: true)
+                    ProgramId = table.Column<int>(nullable: false)
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_Timeranges", x => x.TimerangeId);
                     table.ForeignKey(
-                        name: "FK_Timeranges_Programs_ProgramId1",
-                        column: x => x.ProgramId1,
+                        name: "FK_Timeranges_Programs_ProgramId",
+                        column: x => x.ProgramId,
                         principalTable: "Programs",
                         principalColumn: "ProgramId",
-                        onDelete: ReferentialAction.Restrict);
+                        onDelete: ReferentialAction.Cascade);
                 });
 
             migrationBuilder.CreateIndex(
-                name: "IX_Timeranges_ProgramId1",
+                name: "IX_Timeranges_ProgramId",
                 table: "Timeranges",
-                column: "ProgramId1");
+                column: "ProgramId");
         }
 
         protected override void Down(MigrationBuilder migrationBuilder)

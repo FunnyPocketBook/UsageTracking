@@ -46,10 +46,7 @@ namespace ProgramTracker.Migrations
                     b.Property<DateTime>("End")
                         .HasColumnType("datetime(6)");
 
-                    b.Property<string>("ProgramId")
-                        .HasColumnType("longtext CHARACTER SET utf8mb4");
-
-                    b.Property<int?>("ProgramId1")
+                    b.Property<int>("ProgramId")
                         .HasColumnType("int");
 
                     b.Property<DateTime>("Start")
@@ -57,7 +54,7 @@ namespace ProgramTracker.Migrations
 
                     b.HasKey("TimerangeId");
 
-                    b.HasIndex("ProgramId1");
+                    b.HasIndex("ProgramId");
 
                     b.ToTable("Timeranges");
                 });
@@ -66,7 +63,9 @@ namespace ProgramTracker.Migrations
                 {
                     b.HasOne("ProgramTracker.Program", null)
                         .WithMany("Timeranges")
-                        .HasForeignKey("ProgramId1");
+                        .HasForeignKey("ProgramId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 #pragma warning restore 612, 618
         }

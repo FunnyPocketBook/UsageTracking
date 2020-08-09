@@ -17,7 +17,7 @@ namespace ProgramTracker
             var configBuilder = ConfigBuilder.Instance();
             configBuilder.Load();
             string[] versions = configBuilder.Config.Version.Split(".");
-            options.UseMySql($"Server={configBuilder.Config.Server};Database={configBuilder.Config.Database};User={configBuilder.Config.User};Password={configBuilder.Config.Password}",
+            options.UseMySql($"Server={configBuilder.Config.Server};Database={configBuilder.Config.Database};User={configBuilder.Config.DbUser};Password={configBuilder.Config.Password}",
                   mySqlOptions => mySqlOptions.ServerVersion(new Version(int.Parse(versions[0]), int.Parse(versions[1]), int.Parse(versions[2])), ServerType.MySql));
         }
     }
@@ -37,6 +37,6 @@ namespace ProgramTracker
         public int TimerangeId { get; set; }
         public DateTime Start { get; set; }
         public DateTime End { get; set; }
-        public string ProgramId { get; set; }
+        public int ProgramId { get; set; }
     }
 }

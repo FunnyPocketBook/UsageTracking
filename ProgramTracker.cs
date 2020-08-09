@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using Microsoft.EntityFrameworkCore;
+using ProgramTracker.Config;
 
 namespace ProgramTracker
 {
@@ -13,15 +14,12 @@ namespace ProgramTracker
         static extern IntPtr GetForegroundWindow();
         [DllImport("user32.dll")]
         public static extern IntPtr GetWindowThreadProcessId(IntPtr hWnd, out uint ProcessId);
-        private static string defaultUser = "default";
+        private static ConfigBuilder builder = ConfigBuilder.Instance();
+
 
         private static void Main(string[] args)
         {
-            if (args != null && args.Length > 0)
-            {
-                defaultUser = args[0];
-            }
-
+            builder.Load();
             DbContext db = new DbContext();
             db.Database.Migrate();
             Console.CancelKeyPress += (sender, e) => KeyboardInterrupt(db);
@@ -92,7 +90,7 @@ namespace ProgramTracker
             Program curProgram = new Program
             {
                 Name = GetActiveProcessFileName(),
-                User = defaultUser
+                User = builder.Config.User
             };
             curProgram.Timeranges.Add(
             new Timerange

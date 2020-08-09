@@ -9,7 +9,7 @@ using ProgramTracker;
 namespace ProgramTracker.Migrations
 {
     [DbContext(typeof(DbContext))]
-    [Migration("20200809000504_Initial")]
+    [Migration("20200809014110_Initial")]
     partial class Initial
     {
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -48,10 +48,7 @@ namespace ProgramTracker.Migrations
                     b.Property<DateTime>("End")
                         .HasColumnType("datetime(6)");
 
-                    b.Property<string>("ProgramId")
-                        .HasColumnType("longtext CHARACTER SET utf8mb4");
-
-                    b.Property<int?>("ProgramId1")
+                    b.Property<int>("ProgramId")
                         .HasColumnType("int");
 
                     b.Property<DateTime>("Start")
@@ -59,7 +56,7 @@ namespace ProgramTracker.Migrations
 
                     b.HasKey("TimerangeId");
 
-                    b.HasIndex("ProgramId1");
+                    b.HasIndex("ProgramId");
 
                     b.ToTable("Timeranges");
                 });
@@ -68,7 +65,9 @@ namespace ProgramTracker.Migrations
                 {
                     b.HasOne("ProgramTracker.Program", null)
                         .WithMany("Timeranges")
-                        .HasForeignKey("ProgramId1");
+                        .HasForeignKey("ProgramId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 #pragma warning restore 612, 618
         }

@@ -43,10 +43,12 @@ namespace ProgramTracker
         private static void Main(string[] args)
         {
             builder.Load();
+            Console.WriteLine("Connecting to database...");
             context1.Database.Migrate();
             context2.Database.Migrate();
+            Console.WriteLine("Connected to database");
             Console.CancelKeyPress += (sender, e) => KeyboardInterrupt();
-            curProgram = InitProgramCounter();
+            curProgram = InitProgramCounter(GetActiveProcessFileName());
             stopWatch.Start();
 
             Task idleTask = Task.Run(() => CheckIdleTime());
@@ -56,8 +58,20 @@ namespace ProgramTracker
                 if (pause)
                 {
                     stopWatch.Stop();
-                    SaveProgramInDb(context2);
+                    SaveProgramInDb(context1);
+
+                    stopWatch = new Stopwatch();
+                    stopWatch.Start();
+                    curProgram = InitProgramCounter("Idle");
+
                     waitHandle.WaitOne();
+
+                    stopWatch.Stop();
+                    SaveProgramInDb(context1);
+
+                    stopWatch = new Stopwatch();
+                    stopWatch.Start();
+                    curProgram = InitProgramCounter(GetActiveProcessFileName());
                 }
                 if (!oldProgramName.Equals(curProgram.Name))
                 {
@@ -65,13 +79,13 @@ namespace ProgramTracker
                     SaveProgramInDb(context1);
                     stopWatch = new Stopwatch();
                     stopWatch.Start();
-                    curProgram = InitProgramCounter();
+                    curProgram = InitProgramCounter(GetActiveProcessFileName());
                 }
                 oldProgramName = GetActiveProcessFileName();
                 Thread.Sleep(builder.Config.PollRate);
                 if (debug)
                 {
-                    Console.SetCursorPosition(0, 0);
+                    Console.SetCursorPosition(0, 2);
                     foreach (Program p in context1.Programs.OrderBy(prog => prog.Elapsed).ToList())
                     {
                         Console.WriteLine($"Name: {p.Name}, User: {p.User}, Elapsed: {p.Elapsed}");
@@ -85,12 +99,12 @@ namespace ProgramTracker
 
         private static void CheckIdleTime()
         {
-            //todo: track idle time
+            TimeSpan oldIdleTime = RetrieveIdleTime();
             while (running)
             {
                 TimeSpan curIdleTime = RetrieveIdleTime();
                 if (curIdleTime.CompareTo(new TimeSpan(0, builder.Config.IdleTimeMinutes, 0)) > 0 
-                    && stopWatch.IsRunning && !AudioDetector.IsAnyAudioPlaying())
+                    && stopWatch.IsRunning && !AudioDetector.IsAnyAudioPlaying() && !pause)
                 {
                     if (debug)
                     {
@@ -99,17 +113,17 @@ namespace ProgramTracker
                     waitHandle.Reset();
                     pause = true;
                 }
-                else if (pause)
+                else if (pause && oldIdleTime.CompareTo(curIdleTime) > 0)
                 {
                     if (debug)
                     {
                         Console.WriteLine("Resuming");
                     }
-                    stopWatch.Start();
                     pause = false;
                     waitHandle.Set();
                 }
-                Thread.Sleep(60000);
+                oldIdleTime = curIdleTime;
+                Thread.Sleep(30000);
             }
         }
 
@@ -156,11 +170,11 @@ namespace ProgramTracker
             else { return new TimeSpan(0); }
         }
 
-        private static Program InitProgramCounter()
+        private static Program InitProgramCounter(string processName)
         {
             Program curProgram = new Program
             {
-                Name = GetActiveProcessFileName(),
+                Name = processName,
                 User = builder.Config.User
             };
             curProgram.Timeranges.Add(

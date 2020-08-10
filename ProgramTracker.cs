@@ -5,6 +5,9 @@ using System.Diagnostics;
 using System.Linq;
 using Microsoft.EntityFrameworkCore;
 using ProgramTracker.Config;
+using System.Threading.Tasks;
+using System.Threading;
+using ProgramTracker.Helper;
 
 namespace ProgramTracker
 {
@@ -14,93 +17,143 @@ namespace ProgramTracker
         static extern IntPtr GetForegroundWindow();
         [DllImport("user32.dll")]
         public static extern IntPtr GetWindowThreadProcessId(IntPtr hWnd, out uint ProcessId);
+        [DllImport("user32.dll")]
+        static extern bool GetLastInputInfo(ref LASTINPUTINFO plii);
+        [StructLayout(LayoutKind.Sequential)]
+        struct LASTINPUTINFO
+        {
+            public static readonly int SizeOf = Marshal.SizeOf(typeof(LASTINPUTINFO));
+
+            [MarshalAs(UnmanagedType.U4)]
+            public UInt32 cbSize;
+            [MarshalAs(UnmanagedType.U4)]
+            public UInt32 dwTime;
+        }
+
+        private static Stopwatch stopWatch = new Stopwatch();
         private static ConfigBuilder builder = ConfigBuilder.Instance();
+        private static DbContext context1 = new DbContext();
+        private static DbContext context2 = new DbContext();
+        private static bool running = true;
+        private static Program curProgram;
+        private static bool debug = true;
+        private static ManualResetEvent waitHandle = new ManualResetEvent(false);
+        private static bool pause = false;
 
         private static void Main(string[] args)
         {
             builder.Load();
-            DbContext db = new DbContext();
-            db.Database.Migrate();
-
-            Console.CancelKeyPress += (sender, e) => KeyboardInterrupt(db);
-
-            Stopwatch stopWatch = new Stopwatch();
+            context1.Database.Migrate();
+            context2.Database.Migrate();
+            Console.CancelKeyPress += (sender, e) => KeyboardInterrupt();
+            curProgram = InitProgramCounter();
             stopWatch.Start();
 
-            Program curProgram = InitProgramCounter();
+            Task idleTask = Task.Run(() => CheckIdleTime());
             string oldProgramName = curProgram.Name;
-
-            while (true)
+            while (running)
             {
+                if (pause)
+                {
+                    stopWatch.Stop();
+                    SaveProgramInDb(context2);
+                    waitHandle.WaitOne();
+                }
                 if (!oldProgramName.Equals(curProgram.Name))
                 {
                     stopWatch.Stop();
-                    // set end date for old program
-                    curProgram.Timeranges.Last().End = DateTime.Now;
-                    curProgram.Elapsed += stopWatch.Elapsed;
-
-                    // check if new program exists
-                    // if exists, create new timerange with startDate as start
-                    Program program = db.Programs.SingleOrDefault(p => p.Name == curProgram.Name && p.User == curProgram.User);
-                    if (program != null)
-                    {
-                        program.Timeranges.Add(curProgram.Timeranges.Last());
-                        program.Elapsed += curProgram.Elapsed;
-                        stopWatch = new Stopwatch();
-                        stopWatch.Start();
-                    }
-                    // else, create new program with startDate as start
-                    else
-                    {
-                        db.Add(curProgram);
-                        stopWatch = new Stopwatch();
-                        stopWatch.Start();
-                    }
+                    SaveProgramInDb(context1);
+                    stopWatch = new Stopwatch();
+                    stopWatch.Start();
                     curProgram = InitProgramCounter();
-                    db.SaveChanges();
                 }
                 oldProgramName = GetActiveProcessFileName();
-                System.Threading.Thread.Sleep(builder.Config.PollRate);
-                /*
-                // Poll cursor position every minute to check activity
-                counter++;
-                if (counter % (60 / builder.Config.PollRate * 1000) == 0)
+                Thread.Sleep(builder.Config.PollRate);
+                if (debug)
                 {
-                    counter = 0;
-                    Point curMousePosition = GetMousePosition();
-                    if (curMousePosition.Equals(oldMousePosition))
+                    Console.SetCursorPosition(0, 0);
+                    foreach (Program p in context1.Programs.OrderBy(prog => prog.Elapsed).ToList())
                     {
-                        if (stopWatch.IsRunning)
-                        {
-                            stopWatch.Stop();
-                        }
+                        Console.WriteLine($"Name: {p.Name}, User: {p.User}, Elapsed: {p.Elapsed}");
+                        List<Timerange> timeranges = p.Timeranges;
+                        Console.WriteLine("--------");
                     }
-                    else
-                    {
-                        if (!stopWatch.IsRunning)
-                        {
-                            stopWatch.Start();
-                        }
-                    }
-                }*/
-                Console.SetCursorPosition(0, 0);
-                foreach (Program p in db.Programs.ToList())
-                {
-                    Console.WriteLine($"Name: {p.Name}, User: {p.User}, Elapsed: {p.Elapsed}");
-                    List<Timerange> timeranges = p.Timeranges;
-                    Console.WriteLine("--------");
                 }
             }
-
+            idleTask.Wait();
         }
 
-        static string GetActiveProcessFileName()
+        private static void CheckIdleTime()
+        {
+            //todo: track idle time
+            while (running)
+            {
+                TimeSpan curIdleTime = RetrieveIdleTime();
+                if (curIdleTime.CompareTo(new TimeSpan(0, builder.Config.IdleTimeMinutes, 0)) > 0 
+                    && stopWatch.IsRunning && !AudioDetector.IsAnyAudioPlaying())
+                {
+                    if (debug)
+                    {
+                        Console.WriteLine("Idle");
+                    }                    
+                    waitHandle.Reset();
+                    pause = true;
+                }
+                else if (pause)
+                {
+                    if (debug)
+                    {
+                        Console.WriteLine("Resuming");
+                    }
+                    stopWatch.Start();
+                    pause = false;
+                    waitHandle.Set();
+                }
+                Thread.Sleep(60000);
+            }
+        }
+
+        private static void SaveProgramInDb(DbContext db)
+        {
+            // set end date for old program
+            curProgram.Timeranges.Last().End = DateTime.Now;
+            curProgram.Elapsed += stopWatch.Elapsed;
+
+            // check if new program exists
+            // if exists, create new timerange with startDate as start
+            Program program = db.Programs.SingleOrDefault(p => p.Name == curProgram.Name && p.User == curProgram.User);
+            if (program != null)
+            {
+                program.Timeranges.Add(curProgram.Timeranges.Last());
+                program.Elapsed += curProgram.Elapsed;
+            }
+            // else, create new program with startDate as start
+            else
+            {
+                db.Add(curProgram);
+            }
+            db.SaveChanges();
+        }
+
+        private static string GetActiveProcessFileName()
         {
             IntPtr hwnd = GetForegroundWindow();
             uint pid;
             GetWindowThreadProcessId(hwnd, out pid);
             Process p = Process.GetProcessById((int)pid);
             return p.ProcessName;
+        }
+
+        private static TimeSpan RetrieveIdleTime()
+        {
+            LASTINPUTINFO lastInputInfo = new LASTINPUTINFO();
+            lastInputInfo.cbSize = (uint)LASTINPUTINFO.SizeOf;
+            GetLastInputInfo(ref lastInputInfo);
+
+            int elapsedTicks = Environment.TickCount - (int)lastInputInfo.dwTime;
+
+            if (elapsedTicks > 0) { return new TimeSpan(0, 0, 0, 0, elapsedTicks); }
+            else { return new TimeSpan(0); }
         }
 
         private static Program InitProgramCounter()
@@ -118,11 +171,19 @@ namespace ProgramTracker
             return curProgram;
         }
 
-        static void KeyboardInterrupt(DbContext db)
+        private static void KeyboardInterrupt()
         {
             Console.WriteLine("Keyboard interrupt");
-            db.SaveChanges();
-            db.Dispose();
+            ExitProgram();
+        }
+
+        private static void ExitProgram()
+        {
+            context1.SaveChanges();
+            context1.Dispose();
+            context2.SaveChanges();
+            context2.Dispose();
+            running = false;
             System.Environment.Exit(1);
         }
     }

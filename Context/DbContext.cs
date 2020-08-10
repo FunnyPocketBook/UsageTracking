@@ -18,7 +18,10 @@ namespace ProgramTracker
             configBuilder.Load();
             string[] versions = configBuilder.Config.Version.Split(".");
             options.UseMySql($"Server={configBuilder.Config.Server};Database={configBuilder.Config.Database};User={configBuilder.Config.DbUser};Password={configBuilder.Config.Password}",
-                  mySqlOptions => mySqlOptions.ServerVersion(new Version(int.Parse(versions[0]), int.Parse(versions[1]), int.Parse(versions[2])), ServerType.MySql));
+                  mySqlOptions => {
+                      mySqlOptions.ServerVersion(new Version(int.Parse(versions[0]), int.Parse(versions[1]), int.Parse(versions[2])), ServerType.MySql);
+                      mySqlOptions.EnableRetryOnFailure(3);
+                    });
         }
     }
 

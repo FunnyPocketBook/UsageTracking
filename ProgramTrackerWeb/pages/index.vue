@@ -60,7 +60,7 @@ export default {
         .beginning(new Date(this.query.start_time).getTime()) // we can optionally add beginning and ending times to speed up rendering a little
         .ending(new Date(this.query.end_time).getTime())
         .stack() // toggles graph stacking
-        .margin({ left: 170, right: 30, top: 0, bottom: 0 })
+        .margin({ left: 0, right: 0, top: 0, bottom: 0 })
         .showTimeAxisTick()
         .tickFormat({
           format: this.$d3.time.format("%H"),

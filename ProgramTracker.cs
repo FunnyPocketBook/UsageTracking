@@ -39,6 +39,7 @@ namespace ProgramTracker
         private static bool debug = true;
         private static ManualResetEvent waitHandle = new ManualResetEvent(false);
         private static bool pause = false;
+        private static bool init = false;
 
         private static void Main(string[] args)
         {
@@ -85,8 +86,13 @@ namespace ProgramTracker
                 Thread.Sleep(builder.Config.PollRate);
                 if (debug)
                 {
+                    if (!init)
+                    {
+                        Console.Clear();
+                        init = true;
+                    }
                     Console.SetCursorPosition(0, 2);
-                    foreach (Program p in context1.Programs.OrderBy(prog => prog.Elapsed).ToList())
+                    foreach (Program p in context1.Programs.Where(p => p.User == builder.Config.User).OrderBy(prog => prog.Elapsed).ToList())
                     {
                         Console.WriteLine($"Name: {p.Name}, User: {p.User}, Elapsed: {p.Elapsed}");
                         List<Timerange> timeranges = p.Timeranges;

@@ -4,24 +4,6 @@
       <h1 class="title">
         ProgramTrackerWeb
       </h1>
-      <div class="links">
-        <a
-          href="https://nuxtjs.org/"
-          target="_blank"
-          rel="noopener noreferrer"
-          class="button--green"
-        >
-          Documentation
-        </a>
-        <a
-          href="https://github.com/nuxt/nuxt.js"
-          target="_blank"
-          rel="noopener noreferrer"
-          class="button--grey"
-        >
-          GitHub
-        </a>
-      </div>
       <form @submit.prevent="vis">
         <label for="user">User:</label>
         <input id="user" v-model="query.user" type="text" name="user" />
@@ -91,7 +73,7 @@ export default {
       this.$d3
         .select("#timeline6")
         .append("svg")
-        .attr("width", 1000)
+        .attr("width", window.outerWidth - 200)
         .datum(this.data)
         .call(chart);
     }

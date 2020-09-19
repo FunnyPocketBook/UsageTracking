@@ -32,8 +32,7 @@ namespace ProgramTracker
 
         private static Stopwatch stopWatch = new Stopwatch();
         private static ConfigBuilder builder = ConfigBuilder.Instance();
-        private static DbContext context1 = new DbContext();
-        private static DbContext context2 = new DbContext();
+        private static DbContext context = new DbContext();
         private static bool running = true;
         private static Program curProgram;
         private static bool debug = true;
@@ -45,10 +44,10 @@ namespace ProgramTracker
         {
             builder.Load();
             Console.WriteLine("Connecting to database...");
-            context1.Database.Migrate();
-            context2.Database.Migrate();
+            context.Database.Migrate();
             Console.WriteLine("Connected to database");
             Console.CancelKeyPress += (sender, e) => KeyboardInterrupt();
+            AppDomain.CurrentDomain.ProcessExit += new EventHandler(OnProcessExit);
             curProgram = InitProgramCounter(GetActiveProcessFileName());
             stopWatch.Start();
 
@@ -59,7 +58,7 @@ namespace ProgramTracker
                 if (pause)
                 {
                     stopWatch.Stop();
-                    SaveProgramInDb(context1);
+                    SaveProgramInDb();
 
                     stopWatch = new Stopwatch();
                     stopWatch.Start();
@@ -68,7 +67,7 @@ namespace ProgramTracker
                     waitHandle.WaitOne();
 
                     stopWatch.Stop();
-                    SaveProgramInDb(context1);
+                    SaveProgramInDb();
 
                     stopWatch = new Stopwatch();
                     stopWatch.Start();
@@ -77,7 +76,7 @@ namespace ProgramTracker
                 if (!oldProgramName.Equals(curProgram.Name))
                 {
                     stopWatch.Stop();
-                    SaveProgramInDb(context1);
+                    SaveProgramInDb();
                     stopWatch = new Stopwatch();
                     stopWatch.Start();
                     curProgram = InitProgramCounter(GetActiveProcessFileName());
@@ -92,7 +91,7 @@ namespace ProgramTracker
                         init = true;
                     }
                     Console.SetCursorPosition(0, 2);
-                    foreach (Program p in context1.Programs.Where(p => p.User == builder.Config.User).OrderBy(prog => prog.Elapsed).ToList())
+                    foreach (Program p in context.Programs.Where(p => p.User == builder.Config.User).OrderBy(prog => prog.Elapsed).ToList())
                     {
                         Console.WriteLine($"Name: {p.Name}, User: {p.User}, Elapsed: {p.Elapsed}");
                         List<Timerange> timeranges = p.Timeranges;
@@ -109,13 +108,13 @@ namespace ProgramTracker
             while (running)
             {
                 TimeSpan curIdleTime = RetrieveIdleTime();
-                if (curIdleTime.CompareTo(new TimeSpan(0, builder.Config.IdleTimeMinutes, 0)) > 0 
+                if (curIdleTime.CompareTo(new TimeSpan(0, builder.Config.IdleTimeMinutes, 0)) > 0
                     && stopWatch.IsRunning && !AudioDetector.IsAnyAudioPlaying() && !pause)
                 {
                     if (debug)
                     {
                         Console.WriteLine("Idle");
-                    }                    
+                    }
                     waitHandle.Reset();
                     pause = true;
                 }
@@ -133,7 +132,7 @@ namespace ProgramTracker
             }
         }
 
-        private static void SaveProgramInDb(DbContext db)
+        private static void SaveProgramInDb()
         {
             // set end date for old program
             curProgram.Timeranges.Last().End = DateTime.Now;
@@ -141,18 +140,44 @@ namespace ProgramTracker
 
             // check if new program exists
             // if exists, create new timerange with startDate as start
-            Program program = db.Programs.SingleOrDefault(p => p.Name == curProgram.Name && p.User == curProgram.User);
+            Program program = context.Programs.SingleOrDefault(p => p.Name == curProgram.Name && p.User == curProgram.User);
             if (program != null)
             {
+                string newProgramName = GetActiveProcessFileName();
+                Program newProgram = context.Programs.SingleOrDefault(p => p.Name == newProgramName && p.User == curProgram.User);
+                int newProgramId;
+                if (newProgram == null)
+                {
+                    var addedProgram = context.Add(new Program
+                    {
+                        Name = newProgramName,
+                        User = builder.Config.User
+                    });
+                    context.SaveChanges();
+                    /* 
+                     * TODO: Get the ProgramId of the newly added program above. context.Add() is supposed to be synchronous but for some reason,
+                     * 
+                     * the line below returns null, meaning the program hasn't been added to the DB yet.
+                     * 
+                     */
+                    Program newlyAddedProgram = context.Programs.SingleOrDefault(p => p.Name == newProgramName && p.User == curProgram.User);
+                    newProgramId = newlyAddedProgram.ProgramId;
+                    Console.WriteLine("new program id: " + newProgramId);
+                } else
+                {
+                    newProgramId = newProgram.ProgramId;
+                }
+                Timerange currentTimerange = curProgram.Timeranges.Last();
+                currentTimerange.NextProgramId = newProgramId;
                 program.Timeranges.Add(curProgram.Timeranges.Last());
                 program.Elapsed += curProgram.Elapsed;
             }
             // else, create new program with startDate as start
             else
             {
-                db.Add(curProgram);
+                context.Add(curProgram);
             }
-            db.SaveChanges();
+            context.SaveChanges();
         }
 
         private static string GetActiveProcessFileName()
@@ -178,7 +203,17 @@ namespace ProgramTracker
 
         private static Program InitProgramCounter(string processName)
         {
-            Program curProgram = new Program
+            int oldProgramId = -1;
+            if (curProgram != null)
+            {
+                Program oldProgram = context.Programs.SingleOrDefault(p => p.Name == curProgram.Name && p.User == curProgram.User);
+                if (oldProgram != null)
+                {
+                    oldProgramId = oldProgram.ProgramId;
+                    Console.WriteLine(oldProgramId);
+                }
+            }
+            curProgram = new Program
             {
                 Name = processName,
                 User = builder.Config.User
@@ -186,7 +221,8 @@ namespace ProgramTracker
             curProgram.Timeranges.Add(
             new Timerange
             {
-                Start = DateTime.Now
+                Start = DateTime.Now,
+                PrevProgramId = oldProgramId
             });
             return curProgram;
         }
@@ -194,17 +230,14 @@ namespace ProgramTracker
         private static void KeyboardInterrupt()
         {
             Console.WriteLine("Keyboard interrupt");
-            ExitProgram();
-        }
-
-        private static void ExitProgram()
-        {
-            context1.SaveChanges();
-            context1.Dispose();
-            context2.SaveChanges();
-            context2.Dispose();
-            running = false;
             System.Environment.Exit(1);
+        }
+        private static void OnProcessExit(object sender, EventArgs e)
+        {
+            SaveProgramInDb();
+            context.SaveChanges();
+            context.Dispose();
+            running = false;
         }
     }
 }

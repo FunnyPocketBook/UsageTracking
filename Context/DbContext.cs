@@ -41,5 +41,7 @@ namespace ProgramTracker
         public DateTime Start { get; set; }
         public DateTime End { get; set; }
         public int ProgramId { get; set; }
+        public int PrevProgramId { get; set; }
+        public int NextProgramId { get; set; }
     }
 }

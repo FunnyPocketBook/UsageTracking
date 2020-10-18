@@ -8,6 +8,7 @@ using ProgramTracker.Config;
 using System.Threading.Tasks;
 using System.Threading;
 using ProgramTracker.Helper;
+using Microsoft.EntityFrameworkCore.Storage;
 
 namespace ProgramTracker
 {
@@ -39,67 +40,78 @@ namespace ProgramTracker
         private static ManualResetEvent waitHandle = new ManualResetEvent(false);
         private static bool pause = false;
         private static bool init = false;
-
+        private static bool connected = false;
         private static void Main(string[] args)
         {
             builder.Load();
             Console.WriteLine("Connecting to database...");
-            context.Database.Migrate();
-            Console.WriteLine("Connected to database");
-            Console.CancelKeyPress += (sender, e) => KeyboardInterrupt();
-            AppDomain.CurrentDomain.ProcessExit += new EventHandler(OnProcessExit);
-            curProgram = InitProgramCounter(GetActiveProcessFileName());
-            stopWatch.Start();
-
-            Task idleTask = Task.Run(() => CheckIdleTime());
-            string oldProgramName = curProgram.Name;
-            while (running)
+            try
             {
-                if (pause)
-                {
-                    stopWatch.Stop();
-                    SaveProgramInDb();
-
-                    stopWatch = new Stopwatch();
-                    stopWatch.Start();
-                    curProgram = InitProgramCounter("Idle");
-
-                    waitHandle.WaitOne();
-
-                    stopWatch.Stop();
-                    SaveProgramInDb();
-
-                    stopWatch = new Stopwatch();
-                    stopWatch.Start();
-                    curProgram = InitProgramCounter(GetActiveProcessFileName());
-                }
-                if (!oldProgramName.Equals(curProgram.Name))
-                {
-                    stopWatch.Stop();
-                    SaveProgramInDb();
-                    stopWatch = new Stopwatch();
-                    stopWatch.Start();
-                    curProgram = InitProgramCounter(GetActiveProcessFileName());
-                }
-                oldProgramName = GetActiveProcessFileName();
-                Thread.Sleep(builder.Config.PollRate);
-                if (debug)
-                {
-                    if (!init)
-                    {
-                        Console.Clear();
-                        init = true;
-                    }
-                    Console.SetCursorPosition(0, 2);
-                    foreach (Program p in context.Programs.Where(p => p.User == builder.Config.User).OrderBy(prog => prog.Elapsed).ToList())
-                    {
-                        Console.WriteLine($"Name: {p.Name}, User: {p.User}, Elapsed: {p.Elapsed}");
-                        List<Timerange> timeranges = p.Timeranges;
-                        Console.WriteLine("--------");
-                    }
-                }
+                context.Database.Migrate();
+                connected = true;
             }
-            idleTask.Wait();
+            catch(RetryLimitExceededException ex) // Connecting to database failed after being retried the configured number of times.
+            {
+                Console.WriteLine("Failed to Connect to database.");
+            }
+            if (connected == true)
+            {
+                Console.WriteLine("Connected to database");
+                Console.CancelKeyPress += (sender, e) => KeyboardInterrupt();
+                AppDomain.CurrentDomain.ProcessExit += new EventHandler(OnProcessExit);
+                curProgram = InitProgramCounter(GetActiveProcessFileName());
+                stopWatch.Start();
+
+                Task idleTask = Task.Run(() => CheckIdleTime());
+                string oldProgramName = curProgram.Name;
+                while (running)
+                {
+                    if (pause)
+                    {
+                        stopWatch.Stop();
+                        SaveProgramInDb();
+
+                        stopWatch = new Stopwatch();
+                        stopWatch.Start();
+                        curProgram = InitProgramCounter("Idle");
+
+                        waitHandle.WaitOne();
+
+                        stopWatch.Stop();
+                        SaveProgramInDb();
+
+                        stopWatch = new Stopwatch();
+                        stopWatch.Start();
+                        curProgram = InitProgramCounter(GetActiveProcessFileName());
+                    }
+                    if (!oldProgramName.Equals(curProgram.Name))
+                    {
+                        stopWatch.Stop();
+                        SaveProgramInDb();
+                        stopWatch = new Stopwatch();
+                        stopWatch.Start();
+                        curProgram = InitProgramCounter(GetActiveProcessFileName());
+                    }
+                    oldProgramName = GetActiveProcessFileName();
+                    Thread.Sleep(builder.Config.PollRate);
+                    if (debug)
+                    {
+                        if (!init)
+                        {
+                            Console.Clear();
+                            init = true;
+                        }
+                        Console.SetCursorPosition(0, 2);
+                        foreach (Program p in context.Programs.Where(p => p.User == builder.Config.User).OrderBy(prog => prog.Elapsed).ToList())
+                        {
+                            Console.WriteLine($"Name: {p.Name}, User: {p.User}, Elapsed: {p.Elapsed}");
+                            List<Timerange> timeranges = p.Timeranges;
+                            Console.WriteLine("--------");
+                        }
+                    }
+                }
+                idleTask.Wait();
+            }
         }
 
         private static void CheckIdleTime()

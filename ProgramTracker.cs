@@ -166,12 +166,6 @@ namespace ProgramTracker
                         User = builder.Config.User
                     });
                     context.SaveChanges();
-                    /* 
-                     * TODO: Get the ProgramId of the newly added program above. context.Add() is supposed to be synchronous but for some reason,
-                     * 
-                     * the line below returns null, meaning the program hasn't been added to the DB yet.
-                     * 
-                     */
                     Program newlyAddedProgram = context.Programs.SingleOrDefault(p => p.Name == newProgramName && p.User == curProgram.User);
                     newProgramId = newlyAddedProgram.ProgramId;
                 } else

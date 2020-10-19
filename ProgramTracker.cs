@@ -52,7 +52,7 @@ namespace ProgramTracker
             }
             catch(RetryLimitExceededException ex) // Connecting to database failed after being retried the configured number of times.
             {
-                Console.WriteLine("Failed to Connect to database.");
+                Console.WriteLine("Failed to Connect to database, retry limit exceeded.");
             }
             if (connected == true)
             {
@@ -174,7 +174,6 @@ namespace ProgramTracker
                      */
                     Program newlyAddedProgram = context.Programs.SingleOrDefault(p => p.Name == newProgramName && p.User == curProgram.User);
                     newProgramId = newlyAddedProgram.ProgramId;
-                    Console.WriteLine("new program id: " + newProgramId);
                 } else
                 {
                     newProgramId = newProgram.ProgramId;
@@ -222,7 +221,6 @@ namespace ProgramTracker
                 if (oldProgram != null)
                 {
                     oldProgramId = oldProgram.ProgramId;
-                    Console.WriteLine(oldProgramId);
                 }
             }
             curProgram = new Program
